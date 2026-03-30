@@ -1,123 +1,57 @@
-  const express = require("express");
+const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
-
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const app = express();
-
-// ✅ MIDDLEWARE (WAJIB DI ATAS)
 app.use(cors());
 app.use(bodyParser.json());
 
-// 🔐 CONFIG
-const SECRET_KEY = "ISI_SECRET_XENDIT";
-const FONNTE_KEY = "ISI_API_FONNTE";
-
+const FONNTE_KEY = "M6M1Fji8efrvraxpjiRnG939RB2";
 let tokens = {};
-let users = [];
+let usedTokens = [];
 
-// 📲 KIRIM WHATSAPP
-async function kirimWA(nomor, pesan) {
-  await fetch("https://api.fonnte.com/send", {
-    method: "POST",
-    headers: {
-      Authorization: FONNTE_KEY,
-    },
-    body: new URLSearchParams({
-      target: nomor,
-      message: pesan,
-    }),
-  });
+function generateKode() {
+  return "VIP-" + Math.floor(100000 + Math.random()*900000);
 }
 
-// 💳 CREATE PAYMENT (QRIS)
-app.get("/create-payment", async (req, res) => {
-  try {
-    const external_id = "order-" + Date.now();
+app.post("/generate-code", async (req, res) => {
+  const { nomor } = req.body;
+  if (!nomor) return res.status(400).json({ error: "Nomor WA wajib" });
 
-    const response = await fetch("https://api.xendit.co/v2/invoices", {
-      method: "POST",
-      headers: {
-        Authorization:
-          "Basic " + Buffer.from(SECRET_KEY + ":").toString("base64"),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        external_id,
-        amount: 10000,
-        description: "Akses Premium",
-        success_redirect_url:
-          "https://USERNAME.github.io/AI-sahrul/akses.html",
-      }),
-    });
+  const kode = generateKode();
+  tokens[kode] = true;
 
-    const data = await response.json();
+  await fetch("https://api.fonnte.com/send", {
+    method: "POST",
+    headers: { "Authorization": FONNTE_KEY },
+    body: new URLSearchParams({
+      target: nomor,
+      message: `Kode premium kamu: ${kode}`
+    })
+  });
 
-    res.json({ paymentUrl: data.invoice_url });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Gagal membuat pembayaran" });
-  }
+  res.json({ success: true, kode });
 });
 
-// 🔔 WEBHOOK XENDIT
-app.post("/webhook", async (req, res) => {
-  try {
-    const data = req.body;
-
-    if (data.status === "PAID") {
-      const token = uuidv4();
-      tokens[token] = true;
-
-      users.push({
-        email: data.payer_email,
-        amount: data.amount,
-        token,
-        date: new Date(),
-      });
-
-      await kirimWA(
-        "628xxxxxxxxxx",
-        `🔥 Pembayaran berhasil!
-
-Token kamu:
-${token}
-
-Akses:
-https://USERNAME.github.io/AI-sahrul/akses.html?token=${token}`
-      );
-    }
-
-    res.sendStatus(200);
-  } catch (err) {
-    console.error(err);
-    res.sendStatus(500);
-  }
-});
-
-// 🔐 VERIFY TOKEN
 app.get("/verify", (req, res) => {
-  const { token } = req.query;
-
-  if (tokens[token]) {
-    delete tokens[token];
-    res.json({ success: true, redirect: "https://google.com" });
+  const { kode } = req.query;
+  if (tokens[kode]) {
+    delete tokens[kode];
+    usedTokens.push(kode);
+    res.json({ success: true, redirect: "https://opal.google/edit/1wuXkQDE_gPxDu6hQ3B0HKfastyudW4BU" });
   } else {
     res.json({ success: false });
   }
 });
 
-// 📊 DASHBOARD
 app.get("/dashboard", (req, res) => {
-  res.json(users);
+  res.setHeader("Content-Type", "application/json");
+  res.send(JSON.stringify(usedTokens, null, 2));
 });
 
-// 🚀 PORT RAILWAY (WAJIB)
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log("Server jalan di port", PORT);
 });
